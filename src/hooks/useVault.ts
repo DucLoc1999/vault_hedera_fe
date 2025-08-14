@@ -51,6 +51,7 @@ export const useVault = () => {
   const [withdrawStatus, setWithdrawStatus] = useState<WithdrawStatus | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isLoadingVaultData, setIsLoadingVaultData] = useState(false);
+  const [calculatedWithdrawalAmount, setCalculatedWithdrawalAmount] = useState(0);
   
   // Helper function to add delay between operations to prevent rate limiting
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -151,7 +152,7 @@ export const useVault = () => {
         );
         
         // USDC 6 decimals
-        const balanceInUnits = balanceSmallest / Math.pow(10, 6);
+        const balanceInUnits = balanceSmallest  / Math.pow(10, 6);
         setUserUSDCBalance(balanceInUnits);
         
         console.log('💰 USDC balance loaded:', balanceInUnits);
@@ -177,7 +178,34 @@ export const useVault = () => {
       setUserShares(mockShares);
       setUserTotalDeposited(mockTotalDeposited);
       
+      // Calculate withdrawal amount if deposits are closed (for fake vaults)
+      if (selectedVault.depositsClosed && mockTotalDeposited > 0) {
+        const withdrawalAmount = mockTotalDeposited * (1 + selectedVault.apy / 100);
+        setCalculatedWithdrawalAmount(withdrawalAmount);
+        console.log('💰 Calculated withdrawal amount (fake vault):', { mockTotalDeposited, apy: selectedVault.apy, withdrawalAmount });
+      } else {
+        setCalculatedWithdrawalAmount(0);
+      }
+      
       console.log('✅ Fake vault user data loaded:', { shares: mockShares, totalDeposited: mockTotalDeposited });
+      
+      // Update vault mockup data (APY will not be recalculated for mock vaults)
+      setVaults(prev => prev.map(v => 
+        v.id === selectedVault.id 
+          ? {
+              ...v,
+              totalDeposits: v.totalDeposits + mockTotalDeposited,
+              totalShares: v.totalShares + mockShares,
+              shareholderCount: v.shareholderCount + (userShares === 0 ? 1 : 0) // Add shareholder if first deposit
+            }
+          : v
+      ));
+      
+      toast({
+        title: "Success",
+        description: `Successfully deposited ${mockTotalDeposited} ${selectedVault.token} to ${selectedVault.name}`,
+      });
+      
       return;
     }
     
@@ -196,6 +224,15 @@ export const useVault = () => {
       
       setUserShares(shares);
       setUserTotalDeposited(totalDeposited);
+      
+      // Calculate withdrawal amount if deposits are closed
+      if (selectedVault.depositsClosed && totalDeposited > 0) {
+        const withdrawalAmount = totalDeposited * (1 + selectedVault.apy / 100);
+        setCalculatedWithdrawalAmount(withdrawalAmount);
+        console.log('💰 Calculated withdrawal amount:', { totalDeposited, apy: selectedVault.apy, withdrawalAmount });
+      } else {
+        setCalculatedWithdrawalAmount(0);
+      }
       
       console.log('✅ Real user data loaded:', { shares, totalDeposited });
     } catch (error) {
@@ -264,10 +301,10 @@ export const useVault = () => {
         // Use mockup data for fake vaults
         const mockTransactions: Transaction[] = [
           {
-            hash: "0x1234567890123456789012345678901234567890123456789012345678901234",
-            from: "0x1234567890123456789012345678901234567890",
+            hash: "0xe7f2933f05a1d0305aa50dcdd05db78ce72b693b835e5cafe89a9394fcfc875c",
+            from: "0xe408553c8b91943e8a84f95c9e7e796aa610ddcd",
             to: selectedVault.vaultAddress,
-            value: "1000000000000000000", // 1 token in wei
+            value: "1", // 1 token in wei
             timestamp: Date.now() - 3600000, // 1 hour ago
             type: "deposit",
             blockNumber: 12345678
@@ -282,10 +319,10 @@ export const useVault = () => {
             blockNumber: 12345677
           },
           {
-            hash: "0x3456789012345678901234567890123456789012345678901234567890123456",
-            from: "0x3456789012345678901234567890123456789012",
+            hash: "0xdb634c8f8821c4c6e09bc4cdbb170134a2dfab7ca455f254b228ddb2fc8793bc",
+            from: "0xe408553c8b91943e8a84f95c9e7e796aa610ddcd",
             to: selectedVault.vaultAddress,
-            value: "2000000000000000000", // 2 tokens in wei
+            value: "0.5", // 2 tokens in wei
             timestamp: Date.now() - 10800000, // 3 hours ago
             type: "deposit",
             blockNumber: 12345676
@@ -756,8 +793,8 @@ export const useVault = () => {
           totalShares: 180,
           shareholderCount: 32,
           maxShareholders: 50,
-          runTimestamp: 1754568292,
-          stopTimestamp: 1754568592,
+          runTimestamp: 1754568592-3600*24*60,
+          stopTimestamp: 1754568592+3600*24*30,
           depositsClosed: false,
           withdrawalsEnabled: false,
           apy: 8.2,
@@ -776,8 +813,8 @@ export const useVault = () => {
           totalShares: 320,
           shareholderCount: 48,
           maxShareholders: 50, // Updated from 100 to 50
-          runTimestamp: 1754368292-3600*30,
-          stopTimestamp: 1754368592-3600*360,
+          runTimestamp: 1754368592 - 3600*24*150,
+          stopTimestamp: 1754368592 - 3600*24*60,
           depositsClosed: true,
           withdrawalsEnabled: false,
           apy: 18.7,
@@ -872,7 +909,7 @@ export const useVault = () => {
   }, [user, loadUserUSDCBalance]);
 
   return {
-    vaults, selectedVault, setSelectedVault, userShares, userTotalDeposited, userTokenBalance, userUSDCBalance,
+    vaults, selectedVault, setSelectedVault, userShares, userTotalDeposited, userTokenBalance, userUSDCBalance, calculatedWithdrawalAmount,
     vaultStates, topTraders, transactionHistory, isLoading, isRefreshing, withdrawStatus, isWithdrawing,
     loadVaultData, loadUserData, loadTopTraders, loadTransactionHistory, deposit, approveToken, withdraw, requestWithdraw, checkWithdrawStatus
   };
